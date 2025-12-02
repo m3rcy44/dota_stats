@@ -1,0 +1,27 @@
+{
+  "scripts": {
+    "dev": "millennium-ttc --build dev",
+    "build": "millennium-ttc --build prod"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.26.7",
+    "@babel/preset-react": "^7.26.3",
+    "@types/react": "16.14.0",
+    "@types/react-dom": "^18.3.5",
+    "@types/webpack": "^5.28.5"
+  },
+  "type": "module",
+  "name": "dota_stats",
+  "version": "0.1.0",
+  "description": "Display OpenDota statistics directly in Steam profiles.",
+  "main": "./webkit/index.ts",
+  "author": "alowave",
+  "license": "MIT",
+  "dependencies": {
+    "@steambrew/api": "^4.2.2",
+    "@steambrew/client": "^4.2.1",
+    "@steambrew/ttc": "^1.2.2",
+    "@steambrew/webkit": "^4.2.1",
+    "preact": "^10.25.4"
+  }
+}
