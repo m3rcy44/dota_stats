@@ -1,0 +1,336 @@
+.profile_in_game {
+    margin-bottom: 15px !important;
+}
+
+.dota-card {
+    background: linear-gradient(145deg, rgba(9, 21, 35, 0.9), rgba(33, 12, 43, 0.85));
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e3edf7;
+    font-family: "Segoe UI", sans-serif;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.dota-card__header {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.dota-card__actions {
+    margin-left: auto;
+    display: flex;
+    align-items: flex-start;
+}
+
+.dota-button {
+    background: linear-gradient(120deg, #f16300, #f99f2b);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+    transition: opacity 0.2s ease;
+}
+
+.dota-button:hover {
+    opacity: 0.85;
+}
+
+.dota-card__avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    object-fit: cover;
+}
+
+.dota-card__identity {
+    flex: 1 1 auto;
+}
+
+.dota-card__name {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.dota-card__rank {
+    font-size: 12px;
+    color: #9ecdfc;
+}
+
+.dota-card__mmr {
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.dota-card__stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.dota-encounter {
+    border-radius: 10px;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.dota-encounter--hit {
+    border-color: rgba(72, 187, 120, 0.45);
+    background: rgba(27, 84, 58, 0.32);
+}
+
+.dota-encounter--miss {
+    border-color: rgba(148, 163, 184, 0.28);
+    background: rgba(30, 41, 59, 0.32);
+}
+
+.dota-encounter--unknown {
+    border-color: rgba(249, 159, 43, 0.36);
+    background: rgba(91, 54, 16, 0.28);
+}
+
+.dota-encounter__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.dota-encounter__label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.dota-encounter__title {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.dota-encounter__badge {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.dota-encounter__meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.dota-encounter__matches {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.dota-encounter-match {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 6px;
+    color: inherit;
+    text-decoration: none;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.dota-encounter-match:hover {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.dota-encounter-match img {
+    width: 48px;
+    height: 27px;
+    border-radius: 5px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.dota-encounter-match__body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dota-encounter-match__title {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dota-encounter-match__meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+.dota-encounter__link {
+    display: inline-block;
+    margin-top: 8px;
+    color: #9ecdfc;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.dota-encounter__link:hover {
+    color: #c6e3ff;
+}
+
+.dota-pill {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+}
+
+.dota-pill__label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dota-pill__value {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.dota-card__heroes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.dota-hero {
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    padding: 8px;
+    align-items: center;
+}
+
+.dota-hero__image {
+    width: 64px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.dota-hero__title {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dota-hero__name {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.dota-hero__meta {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.dota-card__recent {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+}
+
+.dota-card__recent-title {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.65);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    letter-spacing: 0.04em;
+}
+
+.dota-card__recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dota-match {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 10px;
+    padding: 8px;
+}
+
+.dota-match img {
+    width: 64px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    object-fit: cover;
+}
+
+.dota-match__body {
+    flex: 1 1 auto;
+    font-size: 13px;
+}
+
+.dota-match__title {
+    font-weight: 600;
+}
+
+.dota-match__meta {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dota-message {
+    padding: 18px;
+    text-align: center;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.dota-loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    gap: 10px;
+}
+
+.dota-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #f16300;
+    border-radius: 50%;
+    animation: dota-spin 1s linear infinite;
+}
+
+@keyframes dota-spin {
+    to { transform: rotate(360deg); }
+}

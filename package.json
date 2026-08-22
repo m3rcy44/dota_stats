@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "dev": "starlight watch",
+    "build": "starlight pack"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@steambrew/starlight": "^1.1.3",
+    "@types/react": "19.1.1",
+    "@types/react-dom": "19.1.1"
+  },
+  "name": "dota_stats",
+  "version": "0.2.0",
+  "description": "Display OpenDota statistics directly in Steam profiles.",
+  "author": "alowave",
+  "license": "MIT"
+}
