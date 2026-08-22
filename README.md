@@ -5,6 +5,7 @@
 ## ⚡ Features
 - Pulls profile, MMR estimate, rank tier, win/loss record and hero insights using the public OpenDota API.
 - Shows the most played hero, a high-win-rate specialty hero, plus the latest match right inside a Millennium profile card.
+- Detects your logged-in Steam account and shows whether the profile has appeared in your public Dota 2 matches before.
 - Works inside both the Steam overlay browser and the standalone client.
 
 ## 📥 Installation

@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -12,6 +13,9 @@ STEAM32_OFFSET = 76561197960265728
 REQUEST_TIMEOUT = 10
 TOP_HERO_COUNT = 3
 RECENT_MATCH_COUNT = 3
+COMMON_MATCH_DISPLAY_COUNT = 3
+COMMON_MATCH_LOOKUP_LIMIT = 20
+ENCOUNTER_CACHE_TTL_SECONDS = 600
 
 MEDAL_NAMES = {
     1: "Herald",
@@ -25,6 +29,7 @@ MEDAL_NAMES = {
 }
 
 HERO_DICTIONARY: Dict[int, Dict[str, Any]] = {}
+ENCOUNTER_CACHE: Dict[str, Dict[str, Any]] = {}
 LOGGER = PluginUtils.Logger()
 
 
@@ -34,6 +39,18 @@ def steam64_to_account_id(steam_id: str) -> Optional[int]:
         return account_id if account_id > 0 else None
     except (TypeError, ValueError):
         return None
+
+
+def normalize_account_id(value: Any) -> Optional[int]:
+    try:
+        account_id = int(value)
+    except (TypeError, ValueError):
+        return None
+
+    if account_id > STEAM32_OFFSET:
+        account_id -= STEAM32_OFFSET
+
+    return account_id if account_id > 0 else None
 
 
 def load_hero_dictionary() -> Dict[int, Dict[str, Any]]:
@@ -101,8 +118,8 @@ def build_hero_entry(entry: Dict[str, Any], hero_dict: Dict[int, Dict[str, Any]]
     }
 
 
-def fetch_json(url: str) -> Any:
-    response = requests.get(url, timeout=REQUEST_TIMEOUT)
+def fetch_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
     return response.json()
 
@@ -128,7 +145,95 @@ def build_recent_match(entry: Dict[str, Any], hero_dict: Dict[int, Dict[str, Any
     }
 
 
-def get_player_stats(steamId: str) -> Optional[str]:
+def unavailable_encounter(reason: str, message: str) -> Dict[str, Any]:
+    return {
+        "available": False,
+        "played": False,
+        "match_count": 0,
+        "capped": False,
+        "matches": [],
+        "search_url": None,
+        "reason": reason,
+        "message": message,
+    }
+
+
+def build_encounter_payload(
+    viewer_account_id: Any,
+    target_account_id: int,
+    hero_dict: Dict[int, Dict[str, Any]],
+) -> Dict[str, Any]:
+    viewer_id = normalize_account_id(viewer_account_id)
+    if viewer_id is None:
+        return unavailable_encounter(
+            "viewer_unknown",
+            "Could not detect your Steam account ID, so shared matches were not checked.",
+        )
+
+    if viewer_id == target_account_id:
+        return unavailable_encounter(
+            "own_profile",
+            "This is your own Steam profile.",
+        )
+
+    cache_key = f"{viewer_id}:{target_account_id}"
+    now = time.time()
+    cached = ENCOUNTER_CACHE.get(cache_key)
+    if cached and now - cached.get("timestamp", 0) < ENCOUNTER_CACHE_TTL_SECONDS:
+        return cached["payload"]
+
+    search_url = (
+        f"https://www.opendota.com/players/{viewer_id}/matches"
+        f"?included_account_id={target_account_id}&significant=0"
+    )
+
+    try:
+        common_matches = fetch_json(
+            f"{OPEN_DOTA_API}/players/{viewer_id}/matches",
+            params={
+                "included_account_id": target_account_id,
+                "significant": 0,
+                "limit": COMMON_MATCH_LOOKUP_LIMIT + 1,
+            },
+        )
+    except requests.RequestException as exc:
+        LOGGER.log(f"OpenDota encounter lookup failed: {exc}")
+        return unavailable_encounter(
+            "request_failed",
+            "Could not check shared matches right now.",
+        )
+
+    if not isinstance(common_matches, list):
+        common_matches = []
+
+    visible_matches = common_matches[:COMMON_MATCH_LOOKUP_LIMIT]
+    display_matches = [
+        build_recent_match(match, hero_dict)
+        for match in visible_matches[:COMMON_MATCH_DISPLAY_COUNT]
+        if isinstance(match, dict)
+    ]
+    last_match = visible_matches[0] if visible_matches and isinstance(visible_matches[0], dict) else {}
+
+    payload = {
+        "available": True,
+        "played": bool(visible_matches),
+        "match_count": len(visible_matches),
+        "capped": len(common_matches) > COMMON_MATCH_LOOKUP_LIMIT,
+        "matches": display_matches,
+        "last_played": humanize_time(last_match.get("start_time")),
+        "last_played_at": last_match.get("start_time"),
+        "search_url": search_url,
+        "reason": None,
+        "message": None,
+    }
+    ENCOUNTER_CACHE[cache_key] = {
+        "timestamp": now,
+        "payload": payload,
+    }
+    return payload
+
+
+def get_player_stats(steamId: str, viewerAccountId: Optional[Any] = None) -> Optional[str]:
     account_id = steam64_to_account_id(steamId)
     if account_id is None:
         return None
@@ -168,6 +273,7 @@ def get_player_stats(steamId: str) -> Optional[str]:
         "winrate": round((wl.get("win", 0) / max(wl.get("win", 0) + wl.get("lose", 0), 1)) * 100, 1),
         "top_heroes": top_heroes,
         "recent_matches": recent_payload,
+        "encounter": build_encounter_payload(viewerAccountId, account_id, hero_dict),
     }
 
     return json.dumps(stats_payload)

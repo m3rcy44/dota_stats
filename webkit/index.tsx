@@ -3,7 +3,21 @@ type Millennium = {
     findElement: (privateDocument: Document, querySelector: string, timeOut?: number) => Promise<NodeListOf<Element>>,
 };
 
+type SteamClientApi = {
+    WebChat?: {
+        GetCurrentUserAccountID?: () => Promise<number>,
+    },
+    SharedConnection?: {
+        GetLogonInfo?: () => Promise<{
+            strSteamid?: string,
+            strSteamID?: string,
+            bLoggedOn?: boolean,
+        }>,
+    },
+};
+
 declare const Millennium: Millennium;
+declare const SteamClient: SteamClientApi;
 
 type DotaHero = {
     name: string;
@@ -27,6 +41,19 @@ type RecentMatch = {
     match_url?: string | null;
 };
 
+type DotaEncounter = {
+    available: boolean;
+    played: boolean;
+    match_count: number;
+    capped?: boolean;
+    matches?: RecentMatch[];
+    last_played?: string;
+    last_played_at?: number;
+    search_url?: string | null;
+    reason?: string | null;
+    message?: string | null;
+};
+
 type DotaStats = {
     steam_id: string;
     account_id: number;
@@ -42,9 +69,78 @@ type DotaStats = {
     winrate: number;
     top_heroes?: DotaHero[];
     recent_matches?: RecentMatch[];
+    encounter?: DotaEncounter;
 };
 
+const steam32Offset = 76561197960265728n;
 const avatarFallback = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/global/dota2_logo.png";
+
+const escapeHtml = (value?: unknown) => {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+};
+
+const parsePositiveAccountId = (value: unknown) => {
+    const accountId = Number(value);
+    return Number.isInteger(accountId) && accountId > 0 ? accountId : null;
+};
+
+const steam64ToAccountId = (steamId?: string | number | null) => {
+    const raw = String(steamId ?? "").trim();
+    if (!/^\d+$/.test(raw)) {
+        return null;
+    }
+
+    try {
+        const accountId = BigInt(raw) - steam32Offset;
+        if (accountId <= 0n || accountId > BigInt(Number.MAX_SAFE_INTEGER)) {
+            return null;
+        }
+        return Number(accountId);
+    } catch (error) {
+        console.warn("Failed to convert Steam64 ID", error);
+        return null;
+    }
+};
+
+const getViewerAccountId = async () => {
+    try {
+        if (typeof SteamClient !== "undefined") {
+            const accountId = await SteamClient.WebChat?.GetCurrentUserAccountID?.();
+            const parsedAccountId = parsePositiveAccountId(accountId);
+            if (parsedAccountId) {
+                return parsedAccountId;
+            }
+
+            const logonInfo = await SteamClient.SharedConnection?.GetLogonInfo?.();
+            const steamId = logonInfo?.strSteamid ?? logonInfo?.strSteamID;
+            const parsedSteamId = steam64ToAccountId(steamId);
+            if (parsedSteamId) {
+                return parsedSteamId;
+            }
+        }
+    } catch (error) {
+        console.warn("Failed to get current Steam user from SteamClient", error);
+    }
+
+    const communityGlobals = window as unknown as { g_steamID?: string | number };
+    return steam64ToAccountId(communityGlobals.g_steamID);
+};
+
+const profileXmlUrl = () => {
+    const url = new URL(window.location.href);
+    url.hash = "";
+    url.search = "";
+    if (!url.pathname.endsWith("/")) {
+        url.pathname = `${url.pathname}/`;
+    }
+    url.searchParams.set("xml", "1");
+    return url.toString();
+};
 
 const formatNumber = (value?: number | null) => {
     if (value === null || value === undefined) {
@@ -84,10 +180,10 @@ const heroSection = (heroes: DotaHero[] = []) => {
     return heroes
         .map((hero, index) => `
             <div class="dota-hero">
-                ${hero.image ? `<img class="dota-hero__image" src="${hero.image}" alt="${hero.name}">` : ""}
+                ${hero.image ? `<img class="dota-hero__image" src="${escapeHtml(hero.image)}" alt="${escapeHtml(hero.name)}">` : ""}
                 <div>
                     <div class="dota-hero__title">#${index + 1} most played</div>
-                    <div class="dota-hero__name">${hero.name}</div>
+                    <div class="dota-hero__name">${escapeHtml(hero.name)}</div>
                     <div class="dota-hero__meta">${formatNumber(hero.games)} games • ${formatPercentage(hero.winrate)}</div>
                 </div>
             </div>
@@ -104,10 +200,10 @@ const recentMatchSection = (recent: RecentMatch[] = []) => {
         .map((match) => {
             return `
                 <div class="dota-match">
-                    ${match.hero_image ? `<img src="${match.hero_image}" alt="${match.hero ?? 'Dota hero'}">` : ''}
+                    ${match.hero_image ? `<img src="${escapeHtml(match.hero_image)}" alt="${escapeHtml(match.hero ?? 'Dota hero')}">` : ''}
                     <div class="dota-match__body">
-                        <div class="dota-match__title">${match.hero ?? 'Unknown hero'} · ${match.result ?? 'Result unknown'}</div>
-                        <div class="dota-match__meta">${match.kills}/${match.deaths}/${match.assists} · ${match.duration} · ${timeAgo(match.started_at, match.started)}</div>
+                        <div class="dota-match__title">${escapeHtml(match.hero ?? 'Unknown hero')} · ${escapeHtml(match.result ?? 'Result unknown')}</div>
+                        <div class="dota-match__meta">${formatNumber(match.kills)}/${formatNumber(match.deaths)}/${formatNumber(match.assists)} · ${escapeHtml(match.duration)} · ${escapeHtml(timeAgo(match.started_at, match.started))}</div>
                     </div>
                 </div>
             `;
@@ -122,10 +218,69 @@ const recentMatchSection = (recent: RecentMatch[] = []) => {
     `;
 };
 
+const encounterSection = (encounter?: DotaEncounter) => {
+    if (!encounter) {
+        return "";
+    }
+
+    if (!encounter.available) {
+        return `
+            <div class="dota-encounter dota-encounter--unknown">
+                <div class="dota-encounter__header">
+                    <div>
+                        <div class="dota-encounter__label">Shared matches</div>
+                        <div class="dota-encounter__title">Not checked</div>
+                    </div>
+                    <div class="dota-encounter__badge">Unknown</div>
+                </div>
+                <div class="dota-encounter__meta">${escapeHtml(encounter.message ?? "Shared matches could not be checked.")}</div>
+            </div>
+        `;
+    }
+
+    const countLabel = encounter.capped ? `${encounter.match_count}+` : formatNumber(encounter.match_count);
+    const matchWord = encounter.match_count === 1 ? "match" : "matches";
+    const statusClass = encounter.played ? "dota-encounter--hit" : "dota-encounter--miss";
+    const title = encounter.played ? "Played with you before" : "No shared public matches";
+    const badge = encounter.played ? `${countLabel} found` : "None";
+    const meta = encounter.played
+        ? `${countLabel} public ${matchWord} found · Last seen ${timeAgo(encounter.last_played_at, encounter.last_played)}`
+        : "OpenDota did not find public matches with both accounts.";
+    const matchRows = (encounter.matches ?? [])
+        .map((match) => `
+            <a class="dota-encounter-match" target="_blank" rel="noopener" href="${escapeHtml(match.match_url ?? encounter.search_url ?? "#")}">
+                ${match.hero_image ? `<img src="${escapeHtml(match.hero_image)}" alt="${escapeHtml(match.hero ?? 'Dota hero')}">` : ""}
+                <div class="dota-encounter-match__body">
+                    <div class="dota-encounter-match__title">${escapeHtml(match.hero ?? "Unknown hero")} · ${escapeHtml(match.result ?? "Result unknown")}</div>
+                    <div class="dota-encounter-match__meta">${formatNumber(match.kills)}/${formatNumber(match.deaths)}/${formatNumber(match.assists)} · ${escapeHtml(timeAgo(match.started_at, match.started))}</div>
+                </div>
+            </a>
+        `)
+        .join("");
+    const searchLink = encounter.search_url
+        ? `<a class="dota-encounter__link" target="_blank" rel="noopener" href="${escapeHtml(encounter.search_url)}">Open shared matches</a>`
+        : "";
+
+    return `
+        <div class="dota-encounter ${statusClass}">
+            <div class="dota-encounter__header">
+                <div>
+                    <div class="dota-encounter__label">Shared matches</div>
+                    <div class="dota-encounter__title">${escapeHtml(title)}</div>
+                </div>
+                <div class="dota-encounter__badge">${escapeHtml(badge)}</div>
+            </div>
+            <div class="dota-encounter__meta">${escapeHtml(meta)}</div>
+            ${matchRows ? `<div class="dota-encounter__matches">${matchRows}</div>` : ""}
+            ${searchLink}
+        </div>
+    `;
+};
+
 const createMessageCard = (message: string) => {
     const node = document.createElement("div");
     node.className = "dota-card";
-    node.innerHTML = `<div class="dota-message">${message}</div>`;
+    node.innerHTML = `<div class="dota-message">${escapeHtml(message)}</div>`;
     return node;
 };
 
@@ -160,13 +315,13 @@ export default async function WebkitMain() {
 
     try {
         const parser = new DOMParser();
-        const profileUrl = `${window.location.href}/?xml=1`;
-        const profileResponse = await fetch(profileUrl);
+        const profileResponse = await fetch(profileXmlUrl());
         const profileXmlText = await profileResponse.text();
         const profileXmlDoc = parser.parseFromString(profileXmlText, "application/xml");
         const steamID64 = profileXmlDoc.querySelector("steamID64")?.textContent ?? "0";
+        const viewerAccountId = await getViewerAccountId();
 
-        const payload = await Millennium.callServerMethod("get_player_stats", { steamId: steamID64 });
+        const payload = await Millennium.callServerMethod("get_player_stats", { steamId: steamID64, viewerAccountId });
         if (!payload) {
             showError("No public Dota 2 data found for this profile.");
             return;
@@ -177,6 +332,7 @@ export default async function WebkitMain() {
         const avatar = stats.profile?.avatarfull || avatarFallback;
         const heroBlocks = heroSection(stats.top_heroes ?? []);
         const recentBlock = recentMatchSection(stats.recent_matches ?? []);
+        const encounterBlock = encounterSection(stats.encounter);
         const dotabuffUrl = `https://www.dotabuff.com/players/${stats.account_id}`;
         const totalMatches = (stats.wins ?? 0) + (stats.losses ?? 0);
 
@@ -184,16 +340,17 @@ export default async function WebkitMain() {
         statsCard.className = "dota-card";
         statsCard.innerHTML = `
             <div class="dota-card__header">
-                <img class="dota-card__avatar" src="${avatar}" alt="${persona}">
+                <img class="dota-card__avatar" src="${escapeHtml(avatar)}" alt="${escapeHtml(persona)}">
                 <div class="dota-card__identity">
-                    <div class="dota-card__name">${persona}</div>
-                    <div class="dota-card__rank">${stats.rank_label}</div>
+                    <div class="dota-card__name">${escapeHtml(persona)}</div>
+                    <div class="dota-card__rank">${escapeHtml(stats.rank_label)}</div>
                     <div class="dota-card__mmr">Matches: ${formatNumber(totalMatches)} · Dota ID: ${stats.account_id}</div>
                 </div>
                 <div class="dota-card__actions">
-                    <a class="dota-button" target="_blank" rel="noopener" href="${dotabuffUrl}">Open Dotabuff</a>
+                    <a class="dota-button" target="_blank" rel="noopener" href="${escapeHtml(dotabuffUrl)}">Open Dotabuff</a>
                 </div>
             </div>
+            ${encounterBlock}
             <div class="dota-card__stat-grid">
                 <div class="dota-pill">
                     <div class="dota-pill__label">Wins</div>
