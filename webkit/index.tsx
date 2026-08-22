@@ -195,9 +195,9 @@ const isSteamProfilePage = () => {
         && (/^\/(id|profiles)\//).test(window.location.pathname);
 };
 
-const asArray = <T>(value: unknown): T[] => {
+function asArray<T>(value: unknown): T[] {
     return Array.isArray(value) ? (value as T[]) : [];
-};
+}
 
 const formatNumber = (value?: number | null) => {
     if (value === null || value === undefined) {
