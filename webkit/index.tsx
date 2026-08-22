@@ -12,7 +12,7 @@ type SteamClientApi = {
 };
 
 type BackendApi = {
-    getPlayerStats: (targetAccountId: number, viewerAccountId?: number | null) => Promise<string | null>,
+    getPlayerStats: (targetAccountId: number, viewerAccountId?: number | null) => Promise<unknown>,
     getStyles: () => Promise<string>,
 };
 
@@ -351,6 +351,19 @@ const formatError = (message: string, detail?: string) => {
     return `${message} (${detail})`;
 };
 
+const parseStatsPayload = (payload: unknown): DotaStats | null => {
+    if (!payload) {
+        return null;
+    }
+    if (typeof payload === "string") {
+        return JSON.parse(payload) as DotaStats;
+    }
+    if (typeof payload === "object") {
+        return payload as DotaStats;
+    }
+    throw new Error(`Unexpected Dota Stats payload type: ${typeof payload}`);
+};
+
 export default async function WebkitMain() {
     console.log("Dota Stats loaded.");
     if (!isSteamProfilePage()) {
@@ -412,7 +425,11 @@ export default async function WebkitMain() {
             return;
         }
 
-        const stats: DotaStats = JSON.parse(payload);
+        const stats = parseStatsPayload(payload);
+        if (!stats) {
+            showError("No public Dota 2 data found for this profile.");
+            return;
+        }
         if (stats.error) {
             showError(formatError(stats.message ?? "Dota Stats backend returned an error.", stats.detail));
             return;
