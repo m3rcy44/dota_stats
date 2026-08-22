@@ -1,13 +1,13 @@
 type SteamClientApi = {
     WebChat?: {
-        GetCurrentUserAccountID?: () => Promise<number>,
+        GetCurrentUserAccountID?: () => Promise<unknown> | unknown,
     },
     SharedConnection?: {
         GetLogonInfo?: () => Promise<{
             strSteamid?: string,
             strSteamID?: string,
             bLoggedOn?: boolean,
-        }>,
+        } | Record<string, unknown>>,
     },
 };
 
@@ -141,6 +141,20 @@ const steam64ToAccountId = (steamId?: string | number | null) => {
     }
 };
 
+const reportViewerDetection = (source: string, accountId: number | null) => {
+    console.log(`Dota Stats viewer account source "${source}": ${accountId ?? "not found"}`);
+    return accountId;
+};
+
+const accountIdFromSteamCookies = () => {
+    const cookieText = document.cookie ?? "";
+    const decodedCookieText = decodeURIComponent(cookieText);
+    const loginSteamId = decodedCookieText.match(/(?:^|;\s*)steamLoginSecure=(\d{17})\|\|/)?.[1]
+        ?? decodedCookieText.match(/(?:^|;\s*)steamLogin=(\d{17})\|\|/)?.[1];
+    const machineAuthSteamId = cookieText.match(/(?:^|;\s*)steamMachineAuth(\d{17})=/)?.[1];
+    return steam64ToAccountId(loginSteamId ?? machineAuthSteamId);
+};
+
 const xmlUrlForProfileHref = (href: string) => {
     const url = new URL(href);
     url.hash = "";
@@ -193,9 +207,12 @@ const getViewerAccountId = async () => {
         if (typeof frontend !== "undefined" && frontend.getCurrentUserAccountId) {
             const frontendAccountId = await frontend.getCurrentUserAccountId();
             const parsedFrontendAccountId = parsePositiveAccountId(frontendAccountId);
+            reportViewerDetection("frontend", parsedFrontendAccountId);
             if (parsedFrontendAccountId) {
                 return parsedFrontendAccountId;
             }
+        } else {
+            reportViewerDetection("frontend missing", null);
         }
     } catch (error) {
         console.warn("Failed to get current Steam user from frontend", error);
@@ -205,16 +222,20 @@ const getViewerAccountId = async () => {
         if (typeof SteamClient !== "undefined") {
             const accountId = await SteamClient.WebChat?.GetCurrentUserAccountID?.();
             const parsedAccountId = parsePositiveAccountId(accountId);
+            reportViewerDetection("webkit SteamClient.WebChat", parsedAccountId);
             if (parsedAccountId) {
                 return parsedAccountId;
             }
 
             const logonInfo = await SteamClient.SharedConnection?.GetLogonInfo?.();
             const steamId = logonInfo?.strSteamid ?? logonInfo?.strSteamID;
-            const parsedSteamId = steam64ToAccountId(steamId);
+            const parsedSteamId = parsePositiveAccountId(steamId);
+            reportViewerDetection("webkit SteamClient.SharedConnection", parsedSteamId);
             if (parsedSteamId) {
                 return parsedSteamId;
             }
+        } else {
+            reportViewerDetection("webkit SteamClient missing", null);
         }
     } catch (error) {
         console.warn("Failed to get current Steam user from SteamClient", error);
@@ -222,17 +243,27 @@ const getViewerAccountId = async () => {
 
     const communityGlobals = window as unknown as { g_steamID?: string | number };
     const globalAccountId = parsePositiveAccountId(communityGlobals.g_steamID);
+    reportViewerDetection("window.g_steamID", globalAccountId);
     if (globalAccountId) {
         return globalAccountId;
     }
 
+    const cookieAccountId = accountIdFromSteamCookies();
+    reportViewerDetection("steam cookies", cookieAccountId);
+    if (cookieAccountId) {
+        return cookieAccountId;
+    }
+
     const miniProfile = document.querySelector<HTMLElement>("#global_actions [data-miniprofile], #account_pulldown [data-miniprofile]");
     const miniProfileAccountId = parsePositiveAccountId(miniProfile?.dataset?.miniprofile);
+    reportViewerDetection("global_actions data-miniprofile", miniProfileAccountId);
     if (miniProfileAccountId) {
         return miniProfileAccountId;
     }
 
-    return accountIdFromCurrentUserProfileLink();
+    const profileLinkAccountId = await accountIdFromCurrentUserProfileLink();
+    reportViewerDetection("global_actions profile link", profileLinkAccountId);
+    return profileLinkAccountId;
 };
 
 const profileXmlUrl = () => {
@@ -275,6 +306,39 @@ const waitForElement = (selector: string, timeout = 10000) => {
             subtree: true,
         });
     });
+};
+
+type ProfileMount = {
+    parent: Element;
+    referenceNode: ChildNode | null;
+};
+
+const profileMountSelector = [
+    ".profile_rightcol",
+    ".profile_leftcol",
+    ".profile_content",
+    ".profile_header_bg",
+    "#responsive_page_template_content",
+    ".responsive_page_template_content",
+].join(", ");
+
+const waitForProfileMount = async (): Promise<ProfileMount | null> => {
+    const element = await waitForElement(profileMountSelector);
+    if (!element) {
+        return null;
+    }
+
+    if (element.classList.contains("profile_header_bg") && element.parentElement) {
+        return {
+            parent: element.parentElement,
+            referenceNode: element.nextSibling,
+        };
+    }
+
+    return {
+        parent: element,
+        referenceNode: element.children[1] ?? null,
+    };
 };
 
 const injectStyles = async () => {
@@ -471,14 +535,18 @@ export default async function WebkitMain() {
     }
 
     await injectStyles();
-    const rightCol = await waitForElement(".profile_rightcol");
+    const mount = await waitForProfileMount();
 
-    if (!rightCol) {
-        console.error("Parent container '.profile_rightcol' not found");
+    if (!mount) {
+        console.error("Profile mount container not found");
         return;
     }
 
-    const parent = rightCol;
+    const { parent, referenceNode } = mount;
+    const insertCard = (node: Element) => {
+        parent.insertBefore(node, referenceNode?.parentNode === parent ? referenceNode : null);
+    };
+
     const loadingBlock = document.createElement("div");
     loadingBlock.className = "dota-card";
     loadingBlock.innerHTML = `
@@ -487,7 +555,7 @@ export default async function WebkitMain() {
             <div>Fetching Dota data...</div>
         </div>
     `;
-    parent.insertBefore(loadingBlock, parent.children[1] ?? null);
+    insertCard(loadingBlock);
 
     const showError = (message: string) => {
         try {
@@ -495,7 +563,7 @@ export default async function WebkitMain() {
         } catch (err) {
             console.error("Failed to remove loading block", err);
         }
-        parent.insertBefore(createMessageCard(message), parent.children[1] ?? null);
+        insertCard(createMessageCard(message));
     };
 
     try {
@@ -583,7 +651,7 @@ export default async function WebkitMain() {
         `;
 
         parent.removeChild(loadingBlock);
-        parent.insertBefore(statsCard, parent.children[1] ?? null);
+        insertCard(statsCard);
     } catch (error) {
         console.error(error);
         showError("Failed to load Dota 2 stats - please try again in a moment.");
