@@ -16,8 +16,13 @@ type BackendApi = {
     getStyles: () => Promise<string>,
 };
 
+type FrontendApi = {
+    getCurrentUserAccountId?: () => Promise<number | null>,
+};
+
 declare const SteamClient: SteamClientApi;
 declare const backend: BackendApi;
+declare const frontend: FrontendApi;
 
 type DotaHero = {
     name: string;
@@ -89,7 +94,32 @@ const escapeHtml = (value?: unknown) => {
 };
 
 const parsePositiveAccountId = (value: unknown) => {
-    const accountId = Number(value);
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    if (typeof value === "object") {
+        const candidate = value as Record<string, unknown>;
+        return parsePositiveAccountId(
+            candidate.accountid
+                ?? candidate.accountId
+                ?? candidate.steamid
+                ?? candidate.steamId
+                ?? candidate.strSteamid
+                ?? candidate.strSteamID
+        );
+    }
+
+    const raw = String(value).trim();
+    if (!/^\d+$/.test(raw)) {
+        return null;
+    }
+
+    if (raw.length >= 16) {
+        return steam64ToAccountId(raw);
+    }
+
+    const accountId = Number(raw);
     return Number.isInteger(accountId) && accountId > 0 ? accountId : null;
 };
 
@@ -111,7 +141,66 @@ const steam64ToAccountId = (steamId?: string | number | null) => {
     }
 };
 
+const xmlUrlForProfileHref = (href: string) => {
+    const url = new URL(href);
+    url.hash = "";
+    url.search = "";
+    if (!url.pathname.endsWith("/")) {
+        url.pathname = `${url.pathname}/`;
+    }
+    url.searchParams.set("xml", "1");
+    return url.toString();
+};
+
+const currentUserProfileHref = () => {
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("#global_actions a[href]"));
+    const profileLink = links.find((link) => {
+        try {
+            const url = new URL(link.href);
+            return url.hostname === "steamcommunity.com" && (/^\/(id|profiles)\//).test(url.pathname);
+        } catch {
+            return false;
+        }
+    });
+
+    return profileLink?.href ?? null;
+};
+
+const accountIdFromCurrentUserProfileLink = async () => {
+    const href = currentUserProfileHref();
+    if (!href) {
+        return null;
+    }
+
+    try {
+        const accountIdFromUrl = steam64ToAccountId(new URL(href).pathname.match(/\/profiles\/(\d+)/)?.[1]);
+        if (accountIdFromUrl) {
+            return accountIdFromUrl;
+        }
+
+        const response = await fetch(xmlUrlForProfileHref(href));
+        const xmlText = await response.text();
+        const xmlDoc = new DOMParser().parseFromString(xmlText, "application/xml");
+        return steam64ToAccountId(xmlDoc.querySelector("steamID64")?.textContent);
+    } catch (error) {
+        console.warn("Failed to resolve current Steam user profile link", error);
+        return null;
+    }
+};
+
 const getViewerAccountId = async () => {
+    try {
+        if (typeof frontend !== "undefined" && frontend.getCurrentUserAccountId) {
+            const frontendAccountId = await frontend.getCurrentUserAccountId();
+            const parsedFrontendAccountId = parsePositiveAccountId(frontendAccountId);
+            if (parsedFrontendAccountId) {
+                return parsedFrontendAccountId;
+            }
+        }
+    } catch (error) {
+        console.warn("Failed to get current Steam user from frontend", error);
+    }
+
     try {
         if (typeof SteamClient !== "undefined") {
             const accountId = await SteamClient.WebChat?.GetCurrentUserAccountID?.();
@@ -132,7 +221,18 @@ const getViewerAccountId = async () => {
     }
 
     const communityGlobals = window as unknown as { g_steamID?: string | number };
-    return steam64ToAccountId(communityGlobals.g_steamID);
+    const globalAccountId = parsePositiveAccountId(communityGlobals.g_steamID);
+    if (globalAccountId) {
+        return globalAccountId;
+    }
+
+    const miniProfile = document.querySelector<HTMLElement>("#global_actions [data-miniprofile], #account_pulldown [data-miniprofile]");
+    const miniProfileAccountId = parsePositiveAccountId(miniProfile?.dataset?.miniprofile);
+    if (miniProfileAccountId) {
+        return miniProfileAccountId;
+    }
+
+    return accountIdFromCurrentUserProfileLink();
 };
 
 const profileXmlUrl = () => {
