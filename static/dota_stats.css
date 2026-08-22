@@ -6,11 +6,17 @@
     background: linear-gradient(145deg, rgba(9, 21, 35, 0.9), rgba(33, 12, 43, 0.85));
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
     color: #e3edf7;
     font-family: "Segoe UI", sans-serif;
     padding: 14px;
     margin-bottom: 14px;
+    max-width: 100%;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.dota-card * {
+    box-sizing: border-box;
 }
 
 .dota-card__header {
@@ -52,6 +58,7 @@
 
 .dota-card__identity {
     flex: 1 1 auto;
+    min-width: 0;
 }
 
 .dota-card__name {
@@ -194,6 +201,65 @@
 
 .dota-encounter__link:hover {
     color: #c6e3ff;
+}
+
+.dota-viewer-setup {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.dota-viewer-setup__row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dota-viewer-setup__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.28);
+    color: #fff;
+    font-size: 12px;
+    line-height: 30px;
+    outline: none;
+    padding: 0 8px;
+}
+
+.dota-viewer-setup__input:focus {
+    border-color: rgba(249, 159, 43, 0.8);
+}
+
+.dota-viewer-setup__button {
+    flex: 0 0 auto;
+    height: 30px;
+    border: 0;
+    border-radius: 6px;
+    background: #f16300;
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 10px;
+}
+
+.dota-viewer-setup__button:hover {
+    background: #f5851f;
+}
+
+.dota-viewer-setup__hint,
+.dota-viewer-setup__message {
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+.dota-viewer-setup__message--error {
+    color: #ffb4a8;
 }
 
 .dota-pill {

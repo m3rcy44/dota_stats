@@ -83,6 +83,7 @@ type DotaStats = {
 const steam32Offset = 76561197960265728n;
 const avatarFallback = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/global/dota2_logo.png";
 const styleElementId = "dota-stats-styles";
+const viewerAccountStorageKey = "dota_stats_viewer_account_id";
 
 const escapeHtml = (value?: unknown) => {
     return String(value ?? "")
@@ -146,6 +147,30 @@ const reportViewerDetection = (source: string, accountId: number | null) => {
     return accountId;
 };
 
+const accountIdFromStorage = () => {
+    try {
+        return parsePositiveAccountId(window.localStorage.getItem(viewerAccountStorageKey));
+    } catch (error) {
+        console.warn("Failed to read saved Dota Stats viewer account ID", error);
+        return null;
+    }
+};
+
+const saveViewerAccountId = (value: string) => {
+    const accountId = parsePositiveAccountId(value);
+    if (!accountId) {
+        return null;
+    }
+
+    try {
+        window.localStorage.setItem(viewerAccountStorageKey, String(accountId));
+        return accountId;
+    } catch (error) {
+        console.warn("Failed to save Dota Stats viewer account ID", error);
+        return null;
+    }
+};
+
 const accountIdFromSteamCookies = () => {
     const cookieText = document.cookie ?? "";
     const decodedCookieText = decodeURIComponent(cookieText);
@@ -203,6 +228,12 @@ const accountIdFromCurrentUserProfileLink = async () => {
 };
 
 const getViewerAccountId = async () => {
+    const storedAccountId = accountIdFromStorage();
+    reportViewerDetection("localStorage", storedAccountId);
+    if (storedAccountId) {
+        return storedAccountId;
+    }
+
     try {
         if (typeof frontend !== "undefined" && frontend.getCurrentUserAccountId) {
             const frontendAccountId = await frontend.getCurrentUserAccountId();
@@ -277,28 +308,68 @@ const profileXmlUrl = () => {
     return url.toString();
 };
 
-const waitForElement = (selector: string, timeout = 10000) => {
-    const existing = document.querySelector(selector);
-    if (existing) {
-        return Promise.resolve(existing);
+type ProfileMount = {
+    parent: Element;
+    referenceNode: ChildNode | null;
+};
+
+const primaryProfileMountSelector = ".profile_rightcol";
+const fallbackProfileMountSelectors = [
+    ".profile_content",
+    ".profile_header_bg",
+    "#responsive_page_template_content",
+    ".responsive_page_template_content",
+];
+
+const findFallbackProfileMountElement = () => {
+    for (const selector of fallbackProfileMountSelectors) {
+        const element = document.querySelector(selector);
+        if (element) {
+            return element;
+        }
+    }
+
+    return null;
+};
+
+const waitForProfileMountElement = (timeout = 10000, primaryTimeout = 2000) => {
+    const primary = document.querySelector(primaryProfileMountSelector);
+    if (primary) {
+        return Promise.resolve(primary);
     }
 
     return new Promise<Element | null>((resolve) => {
-        let observer: MutationObserver;
-        const timeoutId = window.setTimeout(() => {
-            observer.disconnect();
-            resolve(null);
-        }, timeout);
+        let observer: MutationObserver | null = null;
+        let primaryTimeoutId = 0;
+        let timeoutId = 0;
+        let resolved = false;
 
-        observer = new MutationObserver(() => {
-            const element = document.querySelector(selector);
-            if (!element) {
+        const finish = (element: Element | null) => {
+            if (resolved) {
                 return;
             }
 
+            resolved = true;
+            window.clearTimeout(primaryTimeoutId);
             window.clearTimeout(timeoutId);
-            observer.disconnect();
+            observer?.disconnect();
             resolve(element);
+        };
+
+        primaryTimeoutId = window.setTimeout(() => {
+            finish(document.querySelector(primaryProfileMountSelector) ?? findFallbackProfileMountElement());
+        }, primaryTimeout);
+
+        timeoutId = window.setTimeout(() => {
+            finish(document.querySelector(primaryProfileMountSelector) ?? findFallbackProfileMountElement());
+        }, timeout);
+
+        observer = new MutationObserver(() => {
+            const element = document.querySelector(primaryProfileMountSelector);
+            if (element) {
+                finish(element);
+                return;
+            }
         });
 
         observer.observe(document.documentElement, {
@@ -308,24 +379,17 @@ const waitForElement = (selector: string, timeout = 10000) => {
     });
 };
 
-type ProfileMount = {
-    parent: Element;
-    referenceNode: ChildNode | null;
-};
-
-const profileMountSelector = [
-    ".profile_rightcol",
-    ".profile_leftcol",
-    ".profile_content",
-    ".profile_header_bg",
-    "#responsive_page_template_content",
-    ".responsive_page_template_content",
-].join(", ");
-
 const waitForProfileMount = async (): Promise<ProfileMount | null> => {
-    const element = await waitForElement(profileMountSelector);
+    const element = await waitForProfileMountElement();
     if (!element) {
         return null;
+    }
+
+    if (element.classList.contains("profile_rightcol")) {
+        return {
+            parent: element,
+            referenceNode: element.firstChild,
+        };
     }
 
     if (element.classList.contains("profile_header_bg") && element.parentElement) {
@@ -337,7 +401,7 @@ const waitForProfileMount = async (): Promise<ProfileMount | null> => {
 
     return {
         parent: element,
-        referenceNode: element.children[1] ?? null,
+        referenceNode: null,
     };
 };
 
@@ -448,6 +512,19 @@ const encounterSection = (encounter?: DotaEncounter) => {
     }
 
     if (!encounter.available) {
+        const viewerSetup = encounter.reason === "viewer_unknown"
+            ? `
+                <div class="dota-viewer-setup">
+                    <div class="dota-viewer-setup__row">
+                        <input class="dota-viewer-setup__input" type="text" inputmode="numeric" placeholder="Your Dota ID or Steam64">
+                        <button class="dota-viewer-setup__button" type="button">Save</button>
+                    </div>
+                    <div class="dota-viewer-setup__hint">Enter your Dota ID / Steam32. Steam64 also works and will be converted.</div>
+                    <div class="dota-viewer-setup__message" aria-live="polite"></div>
+                </div>
+            `
+            : "";
+
         return `
             <div class="dota-encounter dota-encounter--unknown">
                 <div class="dota-encounter__header">
@@ -458,6 +535,7 @@ const encounterSection = (encounter?: DotaEncounter) => {
                     <div class="dota-encounter__badge">Unknown</div>
                 </div>
                 <div class="dota-encounter__meta">${escapeHtml(encounter.message ?? "Shared matches could not be checked.")}</div>
+                ${viewerSetup}
             </div>
         `;
     }
@@ -526,6 +604,39 @@ const parseStatsPayload = (payload: unknown): DotaStats | null => {
         return payload as DotaStats;
     }
     throw new Error(`Unexpected Dota Stats payload type: ${typeof payload}`);
+};
+
+const wireViewerSetup = (root: Element) => {
+    const input = root.querySelector<HTMLInputElement>(".dota-viewer-setup__input");
+    const button = root.querySelector<HTMLButtonElement>(".dota-viewer-setup__button");
+    const message = root.querySelector<HTMLElement>(".dota-viewer-setup__message");
+
+    if (!input || !button || !message) {
+        return;
+    }
+
+    const submit = () => {
+        const savedAccountId = saveViewerAccountId(input.value);
+        if (!savedAccountId) {
+            message.classList.add("dota-viewer-setup__message--error");
+            message.textContent = "Enter a valid numeric Dota ID or Steam64.";
+            return;
+        }
+
+        message.classList.remove("dota-viewer-setup__message--error");
+        message.textContent = `Saved Dota ID ${savedAccountId}. Refreshing...`;
+        window.setTimeout(() => {
+            window.location.reload();
+        }, 500);
+    };
+
+    button.addEventListener("click", submit);
+    input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            submit();
+        }
+    });
 };
 
 export default async function WebkitMain() {
@@ -649,6 +760,7 @@ export default async function WebkitMain() {
             </div>
             ${recentBlock}
         `;
+        wireViewerSetup(statsCard);
 
         parent.removeChild(loadingBlock);
         insertCard(statsCard);
