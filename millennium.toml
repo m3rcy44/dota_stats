@@ -1,0 +1,42 @@
+[plugin]
+id = "alowave.dota_stats"
+name = "Dota 2 Stats"
+version = "0.2.0"
+author = "alowave"
+description = "Shows public Dota 2 statistics and shared match history on Steam profiles."
+
+[assets]
+resources = ["static/**/*", "LICENSE"]
+
+[backend]
+entry = "backend/main.lua"
+sources = ["backend/**/*.lua"]
+
+[frontend]
+entry = "frontend/index.tsx"
+
+[frontend.globals]
+
+[webkit]
+entry = "webkit/index.tsx"
+
+[compiler]
+output_path = "auto"
+
+[dev]
+auto_restart = true
+reload_steamui_when = "both"
+
+[inspect]
+depth = 4
+colors = true
+show_hidden = true
+
+[logger]
+padding = 0
+backend_prefix = "DOTA BCK"
+frontend_prefix = "DOTA FRT"
+webview_prefix = "DOTA WEB"
+
+[patches]
+debug = false

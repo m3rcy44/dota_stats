@@ -1,9 +1,0 @@
-{
-    "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
-
-    "name": "alowave.dota_stats",
-    "common_name": "Dota 2 Stats",
-    "description": "Shows public Dota 2 statistics from OpenDota on Steam profiles.",
-
-    "include": ["static", "LICENSE"]
-}
