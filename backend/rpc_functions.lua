@@ -61,6 +61,15 @@ local function safe_encode(value)
     return nil, result
 end
 
+local function error_payload(message, detail)
+    local encoded = safe_encode({
+        error = true,
+        message = message,
+        detail = detail,
+    })
+    return encoded or '{"error":true,"message":"Failed to encode error payload"}'
+end
+
 local function fetch_json(path, query)
     local url = path
     if not string.match(url, "^https?://") then
@@ -81,8 +90,12 @@ local function fetch_json(path, query)
     if not response then
         return nil, request_error or "request failed"
     end
-    if response.status < 200 or response.status >= 300 then
-        return nil, "HTTP " .. tostring(response.status)
+    local status = tonumber(response.status or response.status_code or response.code)
+    if not status then
+        return nil, "HTTP response did not include a status code"
+    end
+    if status < 200 or status >= 300 then
+        return nil, "HTTP " .. tostring(status)
     end
 
     local decoded, decode_error = safe_decode(response.body)
@@ -312,14 +325,29 @@ function getStyles()
     return millennium.assets.read("static/dota_stats.css")
 end
 
+local build_player_stats
+
 ---@ffi
 ---@param targetAccountId number
 ---@param viewerAccountId number|nil
 ---@return string|nil
 function getPlayerStats(targetAccountId, viewerAccountId)
+    local ok, result = pcall(function()
+        return build_player_stats(targetAccountId, viewerAccountId)
+    end)
+
+    if not ok then
+        logger:error("Dota Stats getPlayerStats crashed: " .. tostring(result))
+        return error_payload("Dota Stats backend crashed.", tostring(result))
+    end
+
+    return result
+end
+
+function build_player_stats(targetAccountId, viewerAccountId)
     local account_id = normalize_account_id(targetAccountId)
     if not account_id then
-        return nil
+        return error_payload("Could not parse this Steam profile account ID.")
     end
 
     local hero_dict = load_hero_dictionary()
@@ -336,7 +364,10 @@ function getPlayerStats(targetAccountId, viewerAccountId)
             "OpenDota player request failed: "
                 .. tostring(player_err or wl_err or hero_err or recent_err)
         )
-        return nil
+        return error_payload(
+            "OpenDota request failed.",
+            tostring(player_err or wl_err or hero_err or recent_err)
+        )
     end
 
     local eligible_heroes = {}
@@ -388,7 +419,7 @@ function getPlayerStats(targetAccountId, viewerAccountId)
     local encoded, encode_err = safe_encode(payload)
     if not encoded then
         logger:error("Failed to encode Dota stats payload: " .. tostring(encode_err))
-        return nil
+        return error_payload("Failed to encode Dota stats payload.", tostring(encode_err))
     end
     return encoded
 end

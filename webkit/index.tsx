@@ -55,6 +55,9 @@ type DotaEncounter = {
 };
 
 type DotaStats = {
+    error?: boolean;
+    message?: string;
+    detail?: string;
     steam_id: string;
     account_id: number;
     profile: {
@@ -341,6 +344,13 @@ const createMessageCard = (message: string) => {
     return node;
 };
 
+const formatError = (message: string, detail?: string) => {
+    if (!detail) {
+        return message;
+    }
+    return `${message} (${detail})`;
+};
+
 export default async function WebkitMain() {
     console.log("Dota Stats loaded.");
     if (!isSteamProfilePage()) {
@@ -389,13 +399,25 @@ export default async function WebkitMain() {
             return;
         }
 
-        const payload = await backend.getPlayerStats(targetAccountId, viewerAccountId);
+        if (typeof backend === "undefined" || !backend.getPlayerStats) {
+            showError("Dota Stats backend is not available. Rebuild and reinstall the plugin.");
+            return;
+        }
+
+        const payload = viewerAccountId
+            ? await backend.getPlayerStats(targetAccountId, viewerAccountId)
+            : await backend.getPlayerStats(targetAccountId);
         if (!payload) {
             showError("No public Dota 2 data found for this profile.");
             return;
         }
 
         const stats: DotaStats = JSON.parse(payload);
+        if (stats.error) {
+            showError(formatError(stats.message ?? "Dota Stats backend returned an error.", stats.detail));
+            return;
+        }
+
         const persona = stats.profile?.personaname ?? "Dota Player";
         const avatar = stats.profile?.avatarfull || avatarFallback;
         const heroBlocks = heroSection(asArray<DotaHero>(stats.top_heroes));
